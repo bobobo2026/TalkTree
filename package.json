@@ -1,0 +1,30 @@
+{
+  "name": "treeb",
+  "version": "0.1.0",
+  "description": "A real-time thought trajectory visualizer that turns speech or text streams into a growing branching tree.",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bobobo2026/TreeB.git"
+  },
+  "keywords": [
+    "thought-visualization",
+    "speech-analysis",
+    "realtime-ai",
+    "topic-drift",
+    "creative-thinking",
+    "adhd-tools",
+    "canvas-animation"
+  ],
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
