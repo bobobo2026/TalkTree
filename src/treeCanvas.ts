@@ -14,9 +14,16 @@ interface Branch {
   kind: "branch" | "shift";
 }
 
+interface TreeCanvasOptions {
+  transparent?: boolean;
+  showGround?: boolean;
+  showLabel?: boolean;
+}
+
 export class TreeCanvas {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private options: Required<TreeCanvasOptions>;
   private animationId = 0;
   private trunkHeight = 70;
   private targetTrunkHeight = 96;
@@ -26,13 +33,18 @@ export class TreeCanvas {
   private lastEventLabel = "等待文字";
   private lastFrame = performance.now();
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: TreeCanvasOptions = {}) {
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       throw new Error("Canvas 2D is unavailable");
     }
     this.canvas = canvas;
     this.ctx = ctx;
+    this.options = {
+      transparent: options.transparent ?? false,
+      showGround: options.showGround ?? true,
+      showLabel: options.showLabel ?? true
+    };
     this.resize();
     window.addEventListener("resize", this.resize);
     this.tick = this.tick.bind(this);
@@ -51,6 +63,10 @@ export class TreeCanvas {
     this.targetCameraY = 0;
     this.branches = [];
     this.lastEventLabel = "重新开始";
+  }
+
+  refresh(): void {
+    this.resize();
   }
 
   applyEvent(event: TreeEvent): void {
@@ -124,17 +140,23 @@ export class TreeCanvas {
     const width = this.canvas.clientWidth;
     const height = this.canvas.clientHeight;
     this.ctx.clearRect(0, 0, width, height);
-    this.drawBackground(width, height);
+    if (!this.options.transparent) {
+      this.drawBackground(width, height);
+    }
 
     const baseX = width * 0.5;
     const baseY = height - 58 + this.cameraY;
     const topY = baseY - this.trunkHeight;
 
-    this.drawGround(baseX, baseY, width);
+    if (this.options.showGround) {
+      this.drawGround(baseX, baseY, width);
+    }
     this.drawTrunk(baseX, baseY);
     this.branches.forEach((branch) => this.drawBranch(branch, baseX, baseY));
     this.drawCrownHint(baseX, topY);
-    this.drawLabel(width);
+    if (this.options.showLabel) {
+      this.drawLabel(width);
+    }
   }
 
   private drawBackground(width: number, height: number): void {

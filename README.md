@@ -25,6 +25,7 @@ For better results, open Settings and configure your own OpenAI-compatible API k
 - Can run without a key in local demo mode
 - Uses an OpenAI-compatible chat completion API for real semantic analysis when you bring your own key
 - Keeps API keys in browser local storage only
+- Generates a transparent tree overlay for existing vlog/video footage
 
 ## 它能做什么
 
@@ -35,6 +36,7 @@ For better results, open Settings and configure your own OpenAI-compatible API k
 - 支持 OpenAI-compatible 中转站，只需要配置 Base URL 和 API Key
 - 没有 Key 也可以用本地演示模式先试效果
 - API Key 只保存在浏览器本地，不会提交到仓库
+- 可以给已有视频生成透明小树叠加层，用于剪映、Final Cut、Premiere 等剪辑软件
 
 ## Why Text Stream First?
 
@@ -75,6 +77,18 @@ Open Settings in the app and configure:
 
 TalkTree currently uses the chat completions API for semantic analysis. Voice input is hidden in the current public UI because many relay providers do not support audio transcription or Realtime APIs reliably. Use text monitoring with your preferred speech-to-text input method for the best experience.
 
+## Video Overlay Workflow
+
+TalkTree includes a video overlay workspace for finished vlog footage:
+
+1. Import a local video file
+2. Paste an SRT subtitle file or transcript
+3. Generate a timed thought-tree sequence
+4. Preview the transparent tree overlay on top of the video
+5. Export `talktree-overlay.webm` or `talktree-events.json`
+
+The exported WebM contains only the tree overlay on a transparent canvas. Put it above the original video in your editing software. If your configured provider supports `/audio/transcriptions`, TalkTree can also try to transcribe the imported video directly, but SRT/transcript input is the most reliable workflow today.
+
 ## API Key Safety
 
 TalkTree does **not** include a shared public API key in the frontend. A key embedded in a public static site can be extracted and abused by anyone.
@@ -90,7 +104,7 @@ If a future version offers a no-key real AI demo, it should use a small server-s
 
 ## SEO Keywords
 
-TalkTree, thought tree, real-time thought visualization, topic drift, branching thoughts, speech analysis, AI writing companion, ADHD thinking tool, divergent thinking, canvas animation, OpenAI-compatible app, BYOK AI app, speech-to-text visualization, topic trajectory.
+TalkTree, thought tree, real-time thought visualization, topic drift, branching thoughts, speech analysis, AI writing companion, ADHD thinking tool, divergent thinking, canvas animation, OpenAI-compatible app, BYOK AI app, speech-to-text visualization, topic trajectory, vlog overlay, transparent video overlay, creator tools.
 
 ## License
 

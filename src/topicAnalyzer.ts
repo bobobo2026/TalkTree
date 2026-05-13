@@ -48,6 +48,11 @@ export class TopicAnalyzer {
 
   constructor(private getConfig: () => AnalyzerConfig) {}
 
+  reset(): void {
+    this.topicState = FALLBACK_TOPIC;
+    this.firstSegmentTime = null;
+  }
+
   async analyze(segment: SpeechSegment, history: SpeechSegment[]): Promise<SegmentAnalysis> {
     if (this.firstSegmentTime === null) {
       this.firstSegmentTime = segment.startTime;

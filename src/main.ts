@@ -7,7 +7,7 @@ import { TopicAnalyzer } from "./topicAnalyzer";
 import { treeEventFromAnalysis } from "./treeEngine";
 import { TreeCanvas } from "./treeCanvas";
 import { fetchAvailableModels, normalizeBaseUrl, testChatConnection } from "./provider";
-import type { AnalyzerConfig, SegmentAnalysis, SpeechSegment } from "./types";
+import type { AnalyzerConfig, SegmentAnalysis, SpeechSegment, TreeEvent } from "./types";
 
 const STORAGE_KEY = "talktree-config";
 
@@ -36,11 +36,15 @@ app.innerHTML = `
       <div class="header-actions">
         <span class="status-chip" id="statusText">文本监听中</span>
         <span class="status-chip" id="modelBadge">本地演示</span>
+        <div class="mode-switch" aria-label="工作模式">
+          <button class="mode-tab is-active" id="liveModeButton" type="button">实时模式</button>
+          <button class="mode-tab" id="videoModeButton" type="button">视频叠加</button>
+        </div>
         <button class="settings-button key-cta" id="settingsButton" type="button" aria-label="模型设置">配置 AI Key</button>
       </div>
     </header>
 
-    <section class="workspace" aria-label="TalkTree 工作台">
+    <section class="workspace" id="liveWorkspace" aria-label="TalkTree 工作台">
       <aside class="input-column" aria-label="文本输入与实时转写">
         <section class="panel">
           <div class="panel-heading">
@@ -105,6 +109,69 @@ app.innerHTML = `
         </section>
       </aside>
     </section>
+
+    <section class="video-studio" id="videoStudio" hidden aria-label="视频叠加工作台">
+      <aside class="studio-column">
+        <section class="panel studio-panel">
+          <p class="panel-label">1. 导入视频</p>
+          <label class="file-drop">
+            <span>选择 vlog / 视频文件</span>
+            <input id="videoFileInput" type="file" accept="video/*" />
+          </label>
+          <p class="hint">视频只在本机浏览器里预览，不会上传到 TalkTree。</p>
+        </section>
+
+        <section class="panel studio-panel">
+          <div class="panel-heading">
+            <p class="panel-label">2. 字幕 / 文字稿</p>
+            <button class="secondary-button" id="transcribeVideoButton" type="button">尝试从视频转写</button>
+          </div>
+          <textarea id="videoTranscriptInput" class="studio-textarea" placeholder="推荐粘贴 SRT 字幕，或直接粘贴整段文字稿。没有时间码时会按视频长度自动均分。"></textarea>
+          <p class="hint" id="videoTranscriptHint">有 API Key 且中转站支持 /audio/transcriptions 时，可以尝试直接转写视频文件。</p>
+        </section>
+
+        <section class="panel studio-panel">
+          <p class="panel-label">3. 生成叠加层</p>
+          <div class="studio-actions">
+            <button class="primary-button" id="prepareOverlayButton" type="button">生成小树时间轴</button>
+            <button class="ghost-button" id="resetOverlayButton" type="button">重置预览</button>
+          </div>
+          <p class="hint" id="overlayStatus">准备好视频和文字稿后生成。无 Key 时使用本地演示判断。</p>
+        </section>
+      </aside>
+
+      <main class="video-preview-column">
+        <div class="video-frame" id="videoFrame">
+          <video id="sourceVideo" controls playsinline></video>
+          <canvas id="overlayCanvas" aria-label="透明小树叠加层"></canvas>
+          <div class="overlay-topic" id="overlayTopic" hidden>
+            <strong>主题轨迹</strong>
+            <span></span>
+          </div>
+        </div>
+        <div class="export-bar">
+          <button class="secondary-button" id="exportOverlayButton" type="button">导出透明 WebM 叠加层</button>
+          <button class="ghost-button" id="exportEventsButton" type="button">导出 events.json</button>
+          <span class="hint inline-hint">WebM 是小树透明层，可放进剪辑软件叠到原视频上。</span>
+        </div>
+      </main>
+
+      <aside class="studio-column">
+        <section class="panel topic-card">
+          <p class="panel-label">视频分析结果</p>
+          <p class="mode-text" id="overlayModeText">等待生成</p>
+          <p class="topic-text" id="overlayTopicText">还没有小树时间轴</p>
+          <p class="topic-meta" id="overlayMeta">生成后，播放视频即可按时间看到小树生长。</p>
+        </section>
+        <section class="panel history-panel">
+          <div class="panel-heading">
+            <p class="panel-label">分叉点 / 片段</p>
+            <span class="history-count" id="overlayCueCount">0 条</span>
+          </div>
+          <ol class="timeline" id="overlayTimeline"></ol>
+        </section>
+      </aside>
+    </section>
   </section>
 
   <dialog class="settings-dialog" id="settingsDialog">
@@ -164,6 +231,10 @@ const canvas = document.querySelector<HTMLCanvasElement>("#treeCanvas");
 const startButton = document.querySelector<HTMLButtonElement>("#startButton");
 const stopButton = document.querySelector<HTMLButtonElement>("#stopButton");
 const resetButton = document.querySelector<HTMLButtonElement>("#resetButton");
+const liveModeButton = document.querySelector<HTMLButtonElement>("#liveModeButton");
+const videoModeButton = document.querySelector<HTMLButtonElement>("#videoModeButton");
+const liveWorkspace = document.querySelector<HTMLElement>("#liveWorkspace");
+const videoStudio = document.querySelector<HTMLElement>("#videoStudio");
 const settingsButton = document.querySelector<HTMLButtonElement>("#settingsButton");
 const settingsDialog = document.querySelector<HTMLDialogElement>("#settingsDialog");
 const saveSettingsButton = document.querySelector<HTMLButtonElement>("#saveSettingsButton");
@@ -190,9 +261,30 @@ const flushTextButton = document.querySelector<HTMLButtonElement>("#flushTextBut
 const textMonitorHint = document.querySelector<HTMLParagraphElement>("#textMonitorHint");
 const demoCallout = document.querySelector<HTMLDivElement>("#demoCallout");
 const timeline = document.querySelector<HTMLOListElement>("#timeline");
+const videoFileInput = document.querySelector<HTMLInputElement>("#videoFileInput");
+const sourceVideo = document.querySelector<HTMLVideoElement>("#sourceVideo");
+const overlayCanvas = document.querySelector<HTMLCanvasElement>("#overlayCanvas");
+const videoTranscriptInput = document.querySelector<HTMLTextAreaElement>("#videoTranscriptInput");
+const videoTranscriptHint = document.querySelector<HTMLParagraphElement>("#videoTranscriptHint");
+const transcribeVideoButton = document.querySelector<HTMLButtonElement>("#transcribeVideoButton");
+const prepareOverlayButton = document.querySelector<HTMLButtonElement>("#prepareOverlayButton");
+const resetOverlayButton = document.querySelector<HTMLButtonElement>("#resetOverlayButton");
+const exportOverlayButton = document.querySelector<HTMLButtonElement>("#exportOverlayButton");
+const exportEventsButton = document.querySelector<HTMLButtonElement>("#exportEventsButton");
+const overlayStatus = document.querySelector<HTMLParagraphElement>("#overlayStatus");
+const overlayModeText = document.querySelector<HTMLParagraphElement>("#overlayModeText");
+const overlayTopicText = document.querySelector<HTMLParagraphElement>("#overlayTopicText");
+const overlayMeta = document.querySelector<HTMLParagraphElement>("#overlayMeta");
+const overlayTimeline = document.querySelector<HTMLOListElement>("#overlayTimeline");
+const overlayCueCount = document.querySelector<HTMLSpanElement>("#overlayCueCount");
+const overlayTopic = document.querySelector<HTMLDivElement>("#overlayTopic");
 
 if (
   !canvas ||
+  !liveModeButton ||
+  !videoModeButton ||
+  !liveWorkspace ||
+  !videoStudio ||
   !startButton ||
   !stopButton ||
   !resetButton ||
@@ -221,13 +313,34 @@ if (
   !flushTextButton ||
   !textMonitorHint ||
   !demoCallout ||
-  !timeline
+  !timeline ||
+  !videoFileInput ||
+  !sourceVideo ||
+  !overlayCanvas ||
+  !videoTranscriptInput ||
+  !videoTranscriptHint ||
+  !transcribeVideoButton ||
+  !prepareOverlayButton ||
+  !resetOverlayButton ||
+  !exportOverlayButton ||
+  !exportEventsButton ||
+  !overlayStatus ||
+  !overlayModeText ||
+  !overlayTopicText ||
+  !overlayMeta ||
+  !overlayTimeline ||
+  !overlayCueCount ||
+  !overlayTopic
 ) {
   throw new Error("UI initialization failed");
 }
 
 const ui = {
   timeline,
+  liveModeButton,
+  videoModeButton,
+  liveWorkspace,
+  videoStudio,
   statusText,
   modelBadge,
   modeNotice,
@@ -252,18 +365,52 @@ const ui = {
   clearKeyButton,
   startButton,
   stopButton,
-  demoCallout
+  demoCallout,
+  videoFileInput,
+  sourceVideo,
+  overlayCanvas,
+  videoTranscriptInput,
+  videoTranscriptHint,
+  transcribeVideoButton,
+  prepareOverlayButton,
+  resetOverlayButton,
+  exportOverlayButton,
+  exportEventsButton,
+  overlayStatus,
+  overlayModeText,
+  overlayTopicText,
+  overlayMeta,
+  overlayTimeline,
+  overlayCueCount,
+  overlayTopic
 };
 
 let config = loadConfig();
 let segments: SpeechSegment[] = [];
 let analyses: SegmentAnalysis[] = [];
 const tree = new TreeCanvas(canvas);
+const overlayTree = new TreeCanvas(overlayCanvas, { transparent: true, showGround: false, showLabel: true });
 const analyzer = new TopicAnalyzer(() => config);
+const overlayAnalyzer = new TopicAnalyzer(() => config);
 let usingAudioFallback = false;
 let textMonitorBuffer = "";
 let textMonitorLastValue = "";
 let textMonitorTimer: number | null = null;
+let overlayVideoUrl = "";
+let overlayCues: OverlayCue[] = [];
+let overlayAppliedIndex = 0;
+let overlayReplayFrame = 0;
+let overlayRecorder: MediaRecorder | null = null;
+let overlayRecordedChunks: Blob[] = [];
+
+interface OverlayCue {
+  id: string;
+  start: number;
+  end: number;
+  segment: SpeechSegment;
+  analysis: SegmentAnalysis;
+  event: TreeEvent;
+}
 
 const recognizer = new SpeechSegmenter({
   onInterim: (text) => {
@@ -330,6 +477,14 @@ transcriptionModelSelect.addEventListener("change", () => {
   if (ui.transcriptionModelSelect.value) {
     ui.transcriptionModelInput.value = ui.transcriptionModelSelect.value;
   }
+});
+
+liveModeButton.addEventListener("click", () => {
+  switchWorkspaceMode("live");
+});
+
+videoModeButton.addEventListener("click", () => {
+  switchWorkspaceMode("video");
 });
 
 startButton.addEventListener("click", () => {
@@ -434,8 +589,402 @@ flushTextButton.addEventListener("click", () => {
   void flushTextMonitor("manual");
 });
 
+videoFileInput.addEventListener("change", () => {
+  handleVideoFileSelected();
+});
+
+transcribeVideoButton.addEventListener("click", () => {
+  void transcribeVideoFile();
+});
+
+prepareOverlayButton.addEventListener("click", () => {
+  void prepareVideoOverlay();
+});
+
+resetOverlayButton.addEventListener("click", () => {
+  resetOverlayPreview();
+});
+
+exportEventsButton.addEventListener("click", () => {
+  exportOverlayEvents();
+});
+
+exportOverlayButton.addEventListener("click", () => {
+  void exportTransparentOverlay();
+});
+
+sourceVideo.addEventListener("play", () => {
+  startOverlayReplay();
+});
+
+sourceVideo.addEventListener("seeked", () => {
+  syncOverlayToTime();
+});
+
+sourceVideo.addEventListener("ended", () => {
+  stopOverlayReplay();
+});
+
 if (!SpeechSegmenter.isSupported()) {
   setStatus("当前浏览器不支持内置语音识别，开始后会使用录音模式。");
+}
+
+function switchWorkspaceMode(mode: "live" | "video"): void {
+  const videoMode = mode === "video";
+  ui.liveWorkspace.hidden = videoMode;
+  ui.videoStudio.hidden = !videoMode;
+  ui.liveModeButton.classList.toggle("is-active", !videoMode);
+  ui.videoModeButton.classList.toggle("is-active", videoMode);
+  setStatus(videoMode ? "视频叠加工作台" : config.apiKey ? "AI 模式已启用" : "本地演示模式，未连接 AI");
+  if (videoMode) {
+    window.setTimeout(() => overlayTree.refresh(), 0);
+  }
+}
+
+function handleVideoFileSelected(): void {
+  const file = ui.videoFileInput.files?.[0];
+  if (!file) {
+    return;
+  }
+  if (overlayVideoUrl) {
+    URL.revokeObjectURL(overlayVideoUrl);
+  }
+  overlayVideoUrl = URL.createObjectURL(file);
+  ui.sourceVideo.src = overlayVideoUrl;
+  ui.overlayStatus.textContent = "视频已载入。请粘贴字幕/文字稿，或尝试从视频转写。";
+  resetOverlayPreview();
+}
+
+async function transcribeVideoFile(): Promise<void> {
+  const file = ui.videoFileInput.files?.[0];
+  if (!file) {
+    ui.videoTranscriptHint.textContent = "请先选择视频文件。";
+    return;
+  }
+  if (!config.apiKey) {
+    ui.videoTranscriptHint.textContent = "当前是本地演示模式，不能从视频自动转写。请粘贴字幕或配置 Key。";
+    return;
+  }
+
+  ui.transcribeVideoButton.disabled = true;
+  ui.videoTranscriptHint.textContent = "正在把视频交给你配置的转写接口；大文件可能需要一会儿。";
+  try {
+    const text = await transcribeAudio(config, file);
+    ui.videoTranscriptInput.value = text;
+    ui.videoTranscriptHint.textContent = text
+      ? "转写完成。可以生成小树时间轴。"
+      : "转写结果为空，请改用字幕或文字稿。";
+  } catch (error) {
+    console.warn(error);
+    ui.videoTranscriptHint.textContent = "转写失败：中转站可能不支持视频/音频转写，请粘贴字幕或文字稿。";
+  } finally {
+    ui.transcribeVideoButton.disabled = false;
+  }
+}
+
+async function prepareVideoOverlay(): Promise<void> {
+  const transcript = ui.videoTranscriptInput.value.trim();
+  if (!ui.sourceVideo.src) {
+    ui.overlayStatus.textContent = "请先导入视频。";
+    return;
+  }
+  if (!transcript) {
+    ui.overlayStatus.textContent = "请先粘贴字幕/文字稿，或尝试转写视频。";
+    return;
+  }
+
+  const duration = getVideoDuration();
+  const parsedSegments = parseTranscriptToSegments(transcript, duration);
+  if (!parsedSegments.length) {
+    ui.overlayStatus.textContent = "没有识别到可分析的文字片段。";
+    return;
+  }
+
+  ui.prepareOverlayButton.disabled = true;
+  ui.overlayStatus.textContent = `正在生成 ${parsedSegments.length} 个小树事件...`;
+  overlayAnalyzer.reset();
+  overlayCues = [];
+  const history: SpeechSegment[] = [];
+
+  try {
+    for (const segment of parsedSegments) {
+      const analysis = await overlayAnalyzer.analyze(segment, history);
+      const event = treeEventFromAnalysis(analysis);
+      overlayCues.push({
+        id: segment.id,
+        start: segment.startTime / 1000,
+        end: segment.endTime / 1000,
+        segment,
+        analysis,
+        event
+      });
+      history.push(segment);
+      ui.overlayStatus.textContent = `正在生成小树事件 ${overlayCues.length}/${parsedSegments.length}`;
+    }
+    renderOverlayTimeline();
+    resetOverlayPreview();
+    ui.overlayStatus.textContent = config.apiKey
+      ? "小树时间轴已生成。播放视频即可预览真实 AI 分析叠加。"
+      : "小树时间轴已生成。本地演示判断可用，配置 Key 后会更准确。";
+  } catch (error) {
+    console.warn(error);
+    ui.overlayStatus.textContent = "生成失败：请检查模型配置，或先使用本地演示模式。";
+  } finally {
+    ui.prepareOverlayButton.disabled = false;
+  }
+}
+
+function parseTranscriptToSegments(text: string, duration: number): SpeechSegment[] {
+  const srtSegments = parseSrtSegments(text);
+  if (srtSegments.length) {
+    return srtSegments;
+  }
+
+  const parts = text
+    .split(/(?<=[。！？!?；;])|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const safeParts = parts.length ? parts : [text.trim()].filter(Boolean);
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : Math.max(20, safeParts.length * 8);
+  const step = safeDuration / Math.max(1, safeParts.length);
+  return safeParts.map((part, index) => ({
+    id: crypto.randomUUID(),
+    text: part,
+    startTime: index * step * 1000,
+    endTime: Math.max((index + 1) * step * 1000, index * step * 1000 + 1000)
+  }));
+}
+
+function parseSrtSegments(text: string): SpeechSegment[] {
+  const blocks = text.replace(/\r/g, "").split(/\n{2,}/);
+  const segments: SpeechSegment[] = [];
+  blocks.forEach((block) => {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const timeLineIndex = lines.findIndex((line) => line.includes("-->"));
+    if (timeLineIndex < 0) {
+      return;
+    }
+    const [startRaw, endRaw] = lines[timeLineIndex].split("-->").map((part) => part.trim());
+    const start = parseSrtTime(startRaw);
+    const end = parseSrtTime(endRaw);
+    const content = lines.slice(timeLineIndex + 1).join(" ").trim();
+    if (!content || !Number.isFinite(start) || !Number.isFinite(end)) {
+      return;
+    }
+    segments.push({
+      id: crypto.randomUUID(),
+      text: content,
+      startTime: start * 1000,
+      endTime: Math.max(end * 1000, start * 1000 + 1000)
+    });
+  });
+  return segments;
+}
+
+function parseSrtTime(value: string): number {
+  const match = value.match(/(?:(\d+):)?(\d{2}):(\d{2})[,.](\d{1,3})/);
+  if (!match) {
+    return Number.NaN;
+  }
+  const hours = Number(match[1] ?? 0);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  const milliseconds = Number(match[4].padEnd(3, "0"));
+  return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+}
+
+function renderOverlayTimeline(): void {
+  ui.overlayTimeline.innerHTML = "";
+  ui.overlayCueCount.textContent = `${overlayCues.length} 条`;
+  overlayCues
+    .slice()
+    .reverse()
+    .forEach((cue) => {
+      const item = document.createElement("li");
+      item.innerHTML = `
+        <div class="timeline-head">
+          <span>${labelFromAnalysis(cue.analysis)}</span>
+          <time>${formatVideoTime(cue.start)}</time>
+        </div>
+        <p class="timeline-text"></p>
+        <p class="timeline-detail">${cue.analysis.reason} · ${cue.analysis.branchLabel}</p>
+      `;
+      const text = item.querySelector<HTMLParagraphElement>(".timeline-text");
+      if (text) {
+        text.textContent = cue.segment.text;
+      }
+      ui.overlayTimeline.append(item);
+    });
+
+  const lastAnalysis = overlayCues.at(-1)?.analysis;
+  if (lastAnalysis) {
+    ui.overlayModeText.textContent = expressionModeLabel(lastAnalysis.expressionMode);
+    ui.overlayTopicText.textContent = lastAnalysis.topicState.topicPath.join(" -> ") || lastAnalysis.topicState.currentTopic;
+    ui.overlayMeta.textContent = `${config.apiKey ? "AI 判断" : "本地演示判断"} · 共 ${overlayCues.length} 个片段`;
+  }
+}
+
+function resetOverlayPreview(): void {
+  stopOverlayReplay();
+  overlayTree.reset();
+  overlayAppliedIndex = 0;
+  ui.overlayTopic.hidden = true;
+  ui.overlayModeText.textContent = overlayCues.length ? "等待播放" : "等待生成";
+  if (!overlayCues.length) {
+    ui.overlayTopicText.textContent = "还没有小树时间轴";
+    ui.overlayMeta.textContent = "生成后，播放视频即可按时间看到小树生长。";
+  }
+}
+
+function startOverlayReplay(): void {
+  if (!overlayCues.length) {
+    return;
+  }
+  stopOverlayReplay();
+  overlayReplayFrame = requestAnimationFrame(replayOverlayFrame);
+}
+
+function stopOverlayReplay(): void {
+  if (overlayReplayFrame) {
+    cancelAnimationFrame(overlayReplayFrame);
+    overlayReplayFrame = 0;
+  }
+}
+
+function replayOverlayFrame(): void {
+  applyOverlayEventsUntil(ui.sourceVideo.currentTime);
+  overlayReplayFrame = requestAnimationFrame(replayOverlayFrame);
+}
+
+function syncOverlayToTime(): void {
+  if (!overlayCues.length) {
+    return;
+  }
+  overlayTree.reset();
+  overlayAppliedIndex = 0;
+  applyOverlayEventsUntil(ui.sourceVideo.currentTime);
+}
+
+function applyOverlayEventsUntil(time: number): void {
+  while (overlayAppliedIndex < overlayCues.length && overlayCues[overlayAppliedIndex].start <= time) {
+    const cue = overlayCues[overlayAppliedIndex];
+    overlayTree.applyEvent(cue.event);
+    updateOverlayTopic(cue);
+    overlayAppliedIndex += 1;
+  }
+}
+
+function updateOverlayTopic(cue: OverlayCue): void {
+  const path = cue.analysis.topicState.topicPath.join(" -> ") || cue.analysis.topicState.currentTopic;
+  const label = cue.analysis.mode === "branch" ? `分叉：${cue.analysis.branchLabel}` : transitionLabel(cue.analysis.transition);
+  ui.overlayTopic.hidden = false;
+  const text = ui.overlayTopic.querySelector<HTMLSpanElement>("span");
+  if (text) {
+    text.textContent = `${label} · ${path}`;
+  }
+  ui.overlayModeText.textContent = expressionModeLabel(cue.analysis.expressionMode);
+  ui.overlayTopicText.textContent = path;
+  ui.overlayMeta.textContent = `${formatVideoTime(cue.start)} · ${cue.analysis.reason}`;
+}
+
+async function exportTransparentOverlay(): Promise<void> {
+  if (!overlayCues.length) {
+    ui.overlayStatus.textContent = "请先生成小树时间轴。";
+    return;
+  }
+  if (!ui.sourceVideo.src) {
+    ui.overlayStatus.textContent = "请先导入视频。";
+    return;
+  }
+  if (!("MediaRecorder" in window)) {
+    ui.overlayStatus.textContent = "当前浏览器不支持导出 WebM，请换 Chrome 桌面端。";
+    return;
+  }
+
+  ui.exportOverlayButton.disabled = true;
+  ui.overlayStatus.textContent = "正在实时录制透明叠加层，录制时长等于视频时长。";
+  overlayRecordedChunks = [];
+  resetOverlayPreview();
+  ui.sourceVideo.currentTime = 0;
+
+  const stream = ui.overlayCanvas.captureStream(30);
+  const mimeType = pickRecorderMimeType();
+  overlayRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  overlayRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      overlayRecordedChunks.push(event.data);
+    }
+  };
+  overlayRecorder.onstop = () => {
+    const blob = new Blob(overlayRecordedChunks, { type: mimeType || "video/webm" });
+    downloadBlob(blob, "talktree-overlay.webm");
+    ui.exportOverlayButton.disabled = false;
+    ui.overlayStatus.textContent = "透明 WebM 已导出。把它叠到原视频上方即可。";
+  };
+
+  const stopWhenEnded = () => {
+    stopOverlayReplay();
+    overlayRecorder?.stop();
+    ui.sourceVideo.removeEventListener("ended", stopWhenEnded);
+  };
+  try {
+    overlayRecorder.start(250);
+    await ui.sourceVideo.play();
+    startOverlayReplay();
+    ui.sourceVideo.addEventListener("ended", stopWhenEnded);
+  } catch (error) {
+    console.warn(error);
+    stopOverlayReplay();
+    ui.sourceVideo.removeEventListener("ended", stopWhenEnded);
+    if (overlayRecorder.state !== "inactive") {
+      overlayRecorder.stop();
+    }
+    ui.exportOverlayButton.disabled = false;
+    ui.overlayStatus.textContent = "导出失败：浏览器没有允许播放或录制，请手动播放一次后重试。";
+  }
+}
+
+function exportOverlayEvents(): void {
+  if (!overlayCues.length) {
+    ui.overlayStatus.textContent = "请先生成小树时间轴。";
+    return;
+  }
+  const payload = overlayCues.map((cue) => ({
+    start: cue.start,
+    end: cue.end,
+    text: cue.segment.text,
+    event: cue.event,
+    analysis: cue.analysis
+  }));
+  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), "talktree-events.json");
+  ui.overlayStatus.textContent = "events.json 已导出。";
+}
+
+function pickRecorderMimeType(): string {
+  const candidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function getVideoDuration(): number {
+  return Number.isFinite(ui.sourceVideo.duration) && ui.sourceVideo.duration > 0 ? ui.sourceVideo.duration : 0;
+}
+
+function formatVideoTime(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  return `${minutes}:${String(safeSeconds % 60).padStart(2, "0")}`;
 }
 
 async function handleSegment(segment: SpeechSegment): Promise<void> {
