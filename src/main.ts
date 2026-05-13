@@ -10,6 +10,108 @@ import { fetchAvailableModels, normalizeBaseUrl, testChatConnection } from "./pr
 import type { AnalyzerConfig, SegmentAnalysis, SpeechSegment, TreeEvent } from "./types";
 
 const STORAGE_KEY = "talktree-config";
+const LANGUAGE_KEY = "talktree-language";
+type AppLanguage = "zh" | "en";
+
+const textTranslations: Record<string, string> = {
+  实时表达轨迹: "Real-time Thought Tree",
+  文本监听中: "Text monitoring",
+  本地演示: "Local demo",
+  实时模式: "Live",
+  视频叠加: "Video overlay",
+  "配置 AI Key": "Configure AI Key",
+  文本监听模式: "Text Monitor",
+  分析新增文字: "Analyze New Text",
+  本地演示模式: "Local Demo Mode",
+  "未配置 Key 时不会连接任何模型。你可以先体验小树生长；配置自己的 Key 后会启用真实语义分析。":
+    "No model is contacted without a key. You can try the tree first; add your own key to enable real semantic analysis.",
+  "监听规则：新增文字遇到停顿、标点，或积累到一小段后自动分析。":
+    "Monitoring rule: new text is analyzed after pauses, punctuation, or a short accumulated segment.",
+  "实时转写 / 当前片段": "Live Transcript / Current Segment",
+  等待文字输入: "Waiting for text input",
+  "当前没有 API Key。你仍然可以试动画，但分叉判断只是本地兜底，不代表真实语义分析。":
+    "No API key is configured. The animation still works, but branch decisions are local approximations.",
+  重置全部: "Reset All",
+  语音输入: "Voice Input",
+  开始: "Start",
+  停止: "Stop",
+  "文本监听默认开启。这里仅控制麦克风、Realtime 或音频转写。":
+    "Text monitoring is always on. This only controls microphone, Realtime, or audio transcription.",
+  演示模式: "Demo Mode",
+  "未配置 API Key": "No API Key",
+  表达模式: "Expression Mode",
+  仍在判断: "Still judging",
+  主题轨迹: "Topic Path",
+  还没有足够内容形成主题: "Not enough content to form a topic yet",
+  "开始说话后，这里会显示模型推断出的主线。": "After you start, the inferred main thread appears here.",
+  最近片段: "Recent Segments",
+  "最多 5 条": "Latest 5",
+  "1. 导入视频": "1. Import Video",
+  "选择 vlog / 视频文件": "Choose vlog / video file",
+  "视频只在本机浏览器里预览，不会上传到 TalkTree。": "The video is previewed locally and is not uploaded to TalkTree.",
+  "2. 字幕 / 文字稿": "2. Subtitles / Transcript",
+  尝试从视频转写: "Try Video Transcription",
+  "有 API Key 且中转站支持 /audio/transcriptions 时，可以尝试直接转写视频文件。":
+    "If your key and relay support /audio/transcriptions, TalkTree can try to transcribe the video.",
+  "3. 生成叠加层": "3. Generate Overlay",
+  生成小树时间轴: "Generate Tree Timeline",
+  重置预览: "Reset Preview",
+  "准备好视频和文字稿后生成。无 Key 时使用本地演示判断。":
+    "Generate after adding video and transcript. Without a key, local demo judgment is used.",
+  导出透明WebM叠加层: "Export Transparent WebM Overlay",
+  "导出透明 WebM 叠加层": "Export Transparent WebM Overlay",
+  "导出 events.json": "Export events.json",
+  "WebM 是小树透明层，可放进剪辑软件叠到原视频上。":
+    "The WebM is a transparent tree layer that can be placed above the original video in editing software.",
+  视频分析结果: "Video Analysis",
+  等待生成: "Waiting",
+  还没有小树时间轴: "No tree timeline yet",
+  "生成后，播放视频即可按时间看到小树生长。": "After generation, play the video to see the tree grow in sync.",
+  "分叉点 / 片段": "Branch Points / Segments",
+  "0 条": "0 items",
+  模型设置: "Model Settings",
+  "OpenAI-compatible / 中转站": "OpenAI-compatible / Relay",
+  "你的 Key 是本地安全配置": "Your Key Is Stored Locally",
+  "TalkTree 的静态版没有自己的服务器。Key 只保存在当前浏览器，只会发送到你填写的 Base URL。":
+    "The static TalkTree app has no backend server. Your key stays in this browser and is only sent to your configured Base URL.",
+  "清除本地 Key": "Clear Local Key",
+  检测连接: "Test Connection",
+  未检测: "Not tested",
+  "一般只需要填上面两项。使用你自己的模型，主题判断会比本地演示更稳定、更准确。":
+    "Usually only the two fields above are needed. Your own model gives more stable and accurate topic judgment.",
+  "高级设置：模型名称": "Advanced: Model Names",
+  "或手动输入模型名": "Or enter model name manually",
+  "或手动输入转写模型名": "Or enter transcription model manually",
+  "Chat Model 用来判断主题和分叉；Realtime Model / Transcription Model 暂时只保留给后续语音入口。":
+    "Chat Model judges topics and branches. Realtime / Transcription models are kept for future voice input.",
+  "支持 OpenAI-compatible 中转站。Base URL 可以填根地址或 /v1 地址；误填到 /chat/completions 或 /audio/transcriptions 时会自动修正。":
+    "OpenAI-compatible relays are supported. Base URL can be a root or /v1 URL; common endpoint mistakes are corrected automatically.",
+  取消: "Cancel",
+  保存: "Save",
+  "视频叠加工作台": "Video Overlay Studio",
+  "AI 模式已启用": "AI mode enabled",
+  "本地演示模式，未连接 AI": "Local demo mode, AI not connected",
+  设置: "Settings",
+  "AI 语义分析模式": "AI Semantic Analysis",
+  已连接主题判断模型: "Topic model connected",
+  "未连接 AI，结果只是近似演示": "AI not connected; results are approximate",
+  "本地演示模式不会发送模型请求。你可以先试动画；配置 Key 后会启用真实语义分析。":
+    "Local demo mode sends no model requests. Try the animation first; configure a key for real semantic analysis.",
+  AI_MODE_KEY_HINT: "AI mode enabled. Your key stays in this browser; requests are only sent to {baseUrl}."
+};
+
+const placeholderTranslations: Record<string, string> = {
+  "可以用豆包输入法、系统听写或任意语音输入法，把转写文字直接输入到这里。新增文字会自动进入主题判断。":
+    "Use any dictation/input method or type directly here. New text is automatically analyzed.",
+  "推荐粘贴 SRT 字幕，或直接粘贴整段文字稿。没有时间码时会按视频长度自动均分。":
+    "Paste SRT subtitles or a transcript. Without timestamps, segments are distributed across the video duration.",
+  "sk-... / 中转站 Key": "sk-... / relay key",
+  "https://api.example.com/v1": "https://api.example.com/v1"
+};
+
+let currentLanguage: AppLanguage = loadLanguage();
+const originalTextNodes = new WeakMap<Text, string>();
+const originalPlaceholders = new WeakMap<HTMLInputElement | HTMLTextAreaElement, string>();
 
 const defaultConfig: AnalyzerConfig = {
   providerMode: "local-demo",
@@ -25,8 +127,9 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) {
   throw new Error("App root not found");
 }
+const appRoot = app;
 
-app.innerHTML = `
+appRoot.innerHTML = `
   <section class="shell">
     <header class="topbar app-header">
       <div>
@@ -40,6 +143,7 @@ app.innerHTML = `
           <button class="mode-tab is-active" id="liveModeButton" type="button">实时模式</button>
           <button class="mode-tab" id="videoModeButton" type="button">视频叠加</button>
         </div>
+        <button class="language-button" id="languageButton" type="button" aria-label="Switch language">EN</button>
         <button class="settings-button key-cta" id="settingsButton" type="button" aria-label="模型设置">配置 AI Key</button>
       </div>
     </header>
@@ -235,6 +339,7 @@ const liveModeButton = document.querySelector<HTMLButtonElement>("#liveModeButto
 const videoModeButton = document.querySelector<HTMLButtonElement>("#videoModeButton");
 const liveWorkspace = document.querySelector<HTMLElement>("#liveWorkspace");
 const videoStudio = document.querySelector<HTMLElement>("#videoStudio");
+const languageButton = document.querySelector<HTMLButtonElement>("#languageButton");
 const settingsButton = document.querySelector<HTMLButtonElement>("#settingsButton");
 const settingsDialog = document.querySelector<HTMLDialogElement>("#settingsDialog");
 const saveSettingsButton = document.querySelector<HTMLButtonElement>("#saveSettingsButton");
@@ -285,6 +390,7 @@ if (
   !videoModeButton ||
   !liveWorkspace ||
   !videoStudio ||
+  !languageButton ||
   !startButton ||
   !stopButton ||
   !resetButton ||
@@ -341,6 +447,7 @@ const ui = {
   videoModeButton,
   liveWorkspace,
   videoStudio,
+  languageButton,
   statusText,
   modelBadge,
   modeNotice,
@@ -466,6 +573,7 @@ const realtimeTranscriber = new RealtimeTranscriber(() => config, {
 
 syncSettingsForm();
 syncModelBadge();
+applyLanguage();
 
 modelSelect.addEventListener("change", () => {
   if (ui.modelSelect.value) {
@@ -485,6 +593,12 @@ liveModeButton.addEventListener("click", () => {
 
 videoModeButton.addEventListener("click", () => {
   switchWorkspaceMode("video");
+});
+
+languageButton.addEventListener("click", () => {
+  currentLanguage = currentLanguage === "zh" ? "en" : "zh";
+  localStorage.setItem(LANGUAGE_KEY, currentLanguage);
+  applyLanguage();
 });
 
 startButton.addEventListener("click", () => {
@@ -629,13 +743,58 @@ if (!SpeechSegmenter.isSupported()) {
   setStatus("当前浏览器不支持内置语音识别，开始后会使用录音模式。");
 }
 
+function translate(value: string): string {
+  return currentLanguage === "en" ? textTranslations[value] || value : value;
+}
+
+function applyLanguage(): void {
+  document.documentElement.lang = currentLanguage === "en" ? "en" : "zh-CN";
+  ui.languageButton.textContent = currentLanguage === "en" ? "中文" : "EN";
+  translateTextNodes();
+  translatePlaceholders();
+  syncModelBadge();
+}
+
+function translateTextNodes(): void {
+  const walker = document.createTreeWalker(appRoot, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const original = originalTextNodes.get(node) ?? node.nodeValue ?? "";
+    if (!originalTextNodes.has(node)) {
+      originalTextNodes.set(node, original);
+    }
+    const match = original.match(/^(\s*)(.*?)(\s*)$/s);
+    if (match) {
+      node.nodeValue = `${match[1]}${translate(match[2])}${match[3]}`;
+    }
+    node = walker.nextNode() as Text | null;
+  }
+}
+
+function translatePlaceholders(): void {
+  const controls = appRoot.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input[placeholder], textarea[placeholder]");
+  controls.forEach((control) => {
+    const original = originalPlaceholders.get(control) ?? control.placeholder;
+    if (!originalPlaceholders.has(control)) {
+      originalPlaceholders.set(control, original);
+    }
+    control.placeholder = currentLanguage === "en" ? placeholderTranslations[original] || original : original;
+  });
+}
+
 function switchWorkspaceMode(mode: "live" | "video"): void {
   const videoMode = mode === "video";
   ui.liveWorkspace.hidden = videoMode;
   ui.videoStudio.hidden = !videoMode;
   ui.liveModeButton.classList.toggle("is-active", !videoMode);
   ui.videoModeButton.classList.toggle("is-active", videoMode);
-  setStatus(videoMode ? "视频叠加工作台" : config.apiKey ? "AI 模式已启用" : "本地演示模式，未连接 AI");
+  setStatus(
+    videoMode
+      ? translate("视频叠加工作台")
+      : config.apiKey
+        ? translate("AI 模式已启用")
+        : translate("本地演示模式，未连接 AI")
+  );
   if (videoMode) {
     window.setTimeout(() => overlayTree.refresh(), 0);
   }
@@ -1220,18 +1379,18 @@ function setStatus(message: string): void {
 
 function syncModelBadge(): void {
   const isByok = Boolean(config.apiKey);
-  ui.modelBadge.textContent = isByok ? config.model : "本地演示";
-  ui.statusText.textContent = isByok ? "AI 模式已启用" : "本地演示模式，未连接 AI";
-  ui.settingsButton.textContent = isByok ? "设置" : "配置 AI Key";
+  ui.modelBadge.textContent = isByok ? config.model : translate("本地演示");
+  ui.statusText.textContent = isByok ? translate("AI 模式已启用") : translate("本地演示模式，未连接 AI");
+  ui.settingsButton.textContent = isByok ? translate("设置") : translate("配置 AI Key");
   ui.settingsButton.classList.toggle("key-cta", !isByok);
   ui.demoCallout.hidden = isByok;
   ui.modeNotice.classList.toggle("is-live", Boolean(config.apiKey));
   ui.modeNotice.innerHTML = config.apiKey
-    ? "<strong>AI 语义分析模式</strong><span>已连接主题判断模型</span>"
-    : "<strong>本地演示模式</strong><span>未连接 AI，结果只是近似演示</span>";
+    ? `<strong>${translate("AI 语义分析模式")}</strong><span>${translate("已连接主题判断模型")}</span>`
+    : `<strong>${translate("本地演示模式")}</strong><span>${translate("未连接 AI，结果只是近似演示")}</span>`;
   ui.modeHint.textContent = config.apiKey
-    ? `AI 模式已启用。Key 只保存在当前浏览器，请求只会发送到 ${config.baseUrl}。`
-    : "本地演示模式不会发送模型请求。你可以先试动画；配置 Key 后会启用真实语义分析。";
+    ? translate("AI_MODE_KEY_HINT").replace("{baseUrl}", config.baseUrl)
+    : translate("本地演示模式不会发送模型请求。你可以先试动画；配置 Key 后会启用真实语义分析。");
 }
 
 function syncSettingsForm(): void {
@@ -1395,6 +1554,10 @@ function loadConfig(): AnalyzerConfig {
   } catch {
     return defaultConfig;
   }
+}
+
+function loadLanguage(): AppLanguage {
+  return localStorage.getItem(LANGUAGE_KEY) === "en" ? "en" : "zh";
 }
 
 function formatVerifiedTime(value: string): string {

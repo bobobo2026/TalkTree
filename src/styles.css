@@ -112,6 +112,21 @@ h2 {
   background: #293b24;
 }
 
+.language-button {
+  min-height: 40px;
+  border: 1px solid rgba(68, 83, 58, 0.16);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: #2d3928;
+  background: rgba(250, 251, 246, 0.78);
+  box-shadow: 0 10px 28px rgba(45, 55, 38, 0.08);
+  white-space: nowrap;
+}
+
+.language-button:hover {
+  background: #fff;
+}
+
 .workspace {
   min-height: 0;
   display: grid;
