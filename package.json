@@ -1,5 +1,5 @@
 {
-  "name": "treeb",
+  "name": "talktree",
   "version": "0.1.0",
   "description": "A real-time thought trajectory visualizer that turns speech or text streams into a growing branching tree.",
   "private": false,
@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bobobo2026/TreeB.git"
+    "url": "https://github.com/bobobo2026/TalkTree.git"
   },
   "keywords": [
     "thought-visualization",

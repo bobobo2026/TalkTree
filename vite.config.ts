@@ -3,13 +3,13 @@ import { defineConfig, type Plugin } from "vite";
 type ProviderPath = "models" | "chat/completions" | "audio/transcriptions" | "realtime/calls";
 
 export default defineConfig({
-  base: process.env.GITHUB_ACTIONS ? "/TreeB/" : "/",
+  base: process.env.GITHUB_ACTIONS ? "/TalkTree/" : "/",
   plugins: [providerProxy()]
 });
 
 function providerProxy(): Plugin {
   return {
-    name: "treeb-provider-proxy",
+    name: "talktree-provider-proxy",
     configureServer(server) {
       server.middlewares.use("/api/provider", async (req, res) => {
         try {

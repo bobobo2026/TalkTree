@@ -9,7 +9,7 @@ import { TreeCanvas } from "./treeCanvas";
 import { fetchAvailableModels, normalizeBaseUrl, testChatConnection } from "./provider";
 import type { AnalyzerConfig, SegmentAnalysis, SpeechSegment } from "./types";
 
-const STORAGE_KEY = "treeb-config";
+const STORAGE_KEY = "talktree-config";
 
 const defaultConfig: AnalyzerConfig = {
   apiKey: "",
@@ -28,7 +28,7 @@ app.innerHTML = `
   <section class="shell">
     <header class="topbar app-header">
       <div>
-        <p class="eyebrow">TreeB</p>
+        <p class="eyebrow">TalkTree</p>
         <h1>实时表达轨迹</h1>
       </div>
       <div class="header-actions">
@@ -38,7 +38,7 @@ app.innerHTML = `
       </div>
     </header>
 
-    <section class="workspace" aria-label="TreeB 工作台">
+    <section class="workspace" aria-label="TalkTree 工作台">
       <aside class="input-column" aria-label="文本输入与实时转写">
         <section class="panel">
           <div class="panel-heading">
