@@ -30,6 +30,7 @@ export interface SegmentAnalysis {
 }
 
 export type TreeEventType = "grow_trunk" | "grow_branch" | "return_to_trunk" | "shift_branch" | "uncertain";
+export type ProviderMode = "local-demo" | "byok" | "demo-proxy";
 
 export interface TreeEvent {
   type: TreeEventType;
@@ -40,9 +41,11 @@ export interface TreeEvent {
 }
 
 export interface AnalyzerConfig {
+  providerMode: ProviderMode;
   apiKey: string;
   baseUrl: string;
   model: string;
   transcriptionModel: string;
   realtimeModel: string;
+  lastVerifiedAt: string;
 }

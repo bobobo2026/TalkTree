@@ -12,11 +12,13 @@ import type { AnalyzerConfig, SegmentAnalysis, SpeechSegment } from "./types";
 const STORAGE_KEY = "talktree-config";
 
 const defaultConfig: AnalyzerConfig = {
+  providerMode: "local-demo",
   apiKey: "",
   baseUrl: "https://api.openai.com/v1",
   model: "gpt-4o-mini",
   transcriptionModel: "gpt-4o-mini-transcribe",
-  realtimeModel: "gpt-realtime"
+  realtimeModel: "gpt-realtime",
+  lastVerifiedAt: ""
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -34,7 +36,7 @@ app.innerHTML = `
       <div class="header-actions">
         <span class="status-chip" id="statusText">文本监听中</span>
         <span class="status-chip" id="modelBadge">本地演示</span>
-        <button class="settings-button" id="settingsButton" type="button" aria-label="模型设置">设置</button>
+        <button class="settings-button key-cta" id="settingsButton" type="button" aria-label="模型设置">配置 AI Key</button>
       </div>
     </header>
 
@@ -44,6 +46,10 @@ app.innerHTML = `
           <div class="panel-heading">
             <p class="panel-label">文本监听模式</p>
             <button class="secondary-button" id="flushTextButton" type="button">分析新增文字</button>
+          </div>
+          <div class="demo-callout" id="demoCallout">
+            <strong>本地演示模式</strong>
+            <span>未配置 Key 时不会连接任何模型。你可以先体验小树生长；配置自己的 Key 后会启用真实语义分析。</span>
           </div>
           <section class="text-monitor">
             <textarea id="streamTextInput" rows="4" placeholder="可以用豆包输入法、系统听写或任意语音输入法，把转写文字直接输入到这里。新增文字会自动进入主题判断。"></textarea>
@@ -115,11 +121,18 @@ app.innerHTML = `
         <span>Base URL</span>
         <input id="baseUrlInput" type="url" placeholder="https://api.example.com/v1" />
       </label>
+      <section class="security-card" aria-label="Key 安全说明">
+        <div>
+          <strong>你的 Key 是本地安全配置</strong>
+          <p>TalkTree 的静态版没有自己的服务器。Key 只保存在当前浏览器，只会发送到你填写的 Base URL。</p>
+        </div>
+        <button id="clearKeyButton" type="button" class="ghost-button">清除本地 Key</button>
+      </section>
       <div class="connection-check">
         <button id="detectModelsButton" type="button" class="secondary-button">检测连接</button>
         <span id="modelStatus" class="status-pill">未检测</span>
       </div>
-        <p class="settings-note">一般只需要填上面两项。检测连接会先验证聊天模型；如果浏览器语音识别不可用，实时转写还需要中转站支持 /audio/transcriptions。</p>
+      <p class="settings-note">一般只需要填上面两项。使用你自己的模型，主题判断会比本地演示更稳定、更准确。</p>
       <details class="advanced-settings">
         <summary>高级设置：模型名称</summary>
         <label>
@@ -136,9 +149,9 @@ app.innerHTML = `
           <span>Realtime Model</span>
           <input id="realtimeModelInput" type="text" />
         </label>
-        <p class="settings-note">Chat Model 用来判断主题和分叉；Realtime Model / Transcription Model 用于浏览器内置语音识别不可用时的实时转写。</p>
+        <p class="settings-note">Chat Model 用来判断主题和分叉；Realtime Model / Transcription Model 暂时只保留给后续语音入口。</p>
       </details>
-      <p class="settings-note">支持 OpenAI-compatible 中转站。Base URL 可以填根地址或 /v1 地址；误填到 /chat/completions 或 /audio/transcriptions 时会自动修正。Key 只保存在本浏览器。</p>
+      <p class="settings-note">支持 OpenAI-compatible 中转站。Base URL 可以填根地址或 /v1 地址；误填到 /chat/completions 或 /audio/transcriptions 时会自动修正。</p>
       <menu>
         <button value="cancel" class="ghost-button">取消</button>
         <button id="saveSettingsButton" value="default" class="primary-button">保存</button>
@@ -155,6 +168,7 @@ const settingsButton = document.querySelector<HTMLButtonElement>("#settingsButto
 const settingsDialog = document.querySelector<HTMLDialogElement>("#settingsDialog");
 const saveSettingsButton = document.querySelector<HTMLButtonElement>("#saveSettingsButton");
 const detectModelsButton = document.querySelector<HTMLButtonElement>("#detectModelsButton");
+const clearKeyButton = document.querySelector<HTMLButtonElement>("#clearKeyButton");
 const apiKeyInput = document.querySelector<HTMLInputElement>("#apiKeyInput");
 const baseUrlInput = document.querySelector<HTMLInputElement>("#baseUrlInput");
 const modelInput = document.querySelector<HTMLInputElement>("#modelInput");
@@ -174,6 +188,7 @@ const topicMeta = document.querySelector<HTMLParagraphElement>("#topicMeta");
 const streamTextInput = document.querySelector<HTMLTextAreaElement>("#streamTextInput");
 const flushTextButton = document.querySelector<HTMLButtonElement>("#flushTextButton");
 const textMonitorHint = document.querySelector<HTMLParagraphElement>("#textMonitorHint");
+const demoCallout = document.querySelector<HTMLDivElement>("#demoCallout");
 const timeline = document.querySelector<HTMLOListElement>("#timeline");
 
 if (
@@ -185,6 +200,7 @@ if (
   !settingsDialog ||
   !saveSettingsButton ||
   !detectModelsButton ||
+  !clearKeyButton ||
   !apiKeyInput ||
   !baseUrlInput ||
   !modelInput ||
@@ -204,6 +220,7 @@ if (
   !streamTextInput ||
   !flushTextButton ||
   !textMonitorHint ||
+  !demoCallout ||
   !timeline
 ) {
   throw new Error("UI initialization failed");
@@ -215,6 +232,7 @@ const ui = {
   modelBadge,
   modeNotice,
   modeHint,
+  settingsButton,
   apiKeyInput,
   baseUrlInput,
   modelInput,
@@ -231,8 +249,10 @@ const ui = {
   flushTextButton,
   textMonitorHint,
   settingsDialog,
+  clearKeyButton,
   startButton,
-  stopButton
+  stopButton,
+  demoCallout
 };
 
 let config = loadConfig();
@@ -340,10 +360,12 @@ resetButton.addEventListener("click", () => {
     textMonitorTimer = null;
   }
   ui.timeline.innerHTML = "";
-  ui.interimText.textContent = "等待声音输入";
+  ui.interimText.textContent = "等待文字输入";
   ui.expressionModeText.textContent = "仍在判断";
   ui.topicText.textContent = "还没有足够内容形成主题";
-  ui.topicMeta.textContent = "开始说话后，这里会显示模型推断出的主线。";
+  ui.topicMeta.textContent = config.apiKey
+    ? "开始输入后，这里会显示模型推断出的主线。"
+    : "本地演示模式会给出近似主题，配置 Key 后启用真实语义判断。";
   ui.streamTextInput.value = "";
   ui.textMonitorHint.textContent = "监听规则：新增文字遇到停顿、标点，或积累到一小段后自动分析。";
   tree.reset();
@@ -358,12 +380,15 @@ settingsButton.addEventListener("click", () => {
 saveSettingsButton.addEventListener("click", (event) => {
   event.preventDefault();
   const previousStatus = ui.modelStatus.textContent ?? "";
+  const hasKey = apiKeyInput.value.trim().length > 0;
   config = {
+    providerMode: hasKey ? "byok" : "local-demo",
     apiKey: apiKeyInput.value.trim(),
     baseUrl: normalizeBaseUrl(baseUrlInput.value, defaultConfig.baseUrl),
     model: modelInput.value.trim() || defaultConfig.model,
     transcriptionModel: transcriptionModelInput.value.trim() || defaultConfig.transcriptionModel,
-    realtimeModel: realtimeModelInput.value.trim() || defaultConfig.realtimeModel
+    realtimeModel: realtimeModelInput.value.trim() || defaultConfig.realtimeModel,
+    lastVerifiedAt: hasKey && previousStatus.includes("连接可用") ? new Date().toISOString() : config.lastVerifiedAt
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   syncModelBadge();
@@ -387,6 +412,20 @@ detectModelsButton.addEventListener("click", () => {
   void detectModels({ closeAfter: false, source: "manual" });
 });
 
+clearKeyButton.addEventListener("click", () => {
+  ui.apiKeyInput.value = "";
+  config = {
+    ...config,
+    providerMode: "local-demo",
+    apiKey: "",
+    lastVerifiedAt: ""
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  setConnectionStatus("neutral", "已清除本地 Key");
+  syncModelBadge();
+  setStatus("已回到本地演示模式");
+});
+
 streamTextInput.addEventListener("input", () => {
   handleTextMonitorInput();
 });
@@ -402,8 +441,8 @@ if (!SpeechSegmenter.isSupported()) {
 async function handleSegment(segment: SpeechSegment): Promise<void> {
   segments.push(segment);
   ui.interimText.textContent = segment.text;
-  appendTimelineItem(segment, "分析中", "正在观察这段话和主线的关系");
-  setStatus("正在分析刚才这段话");
+  appendTimelineItem(segment, config.apiKey ? "分析中" : "演示分析中", "正在观察这段话和主线的关系");
+  setStatus(config.apiKey ? "正在分析刚才这段话" : "本地演示判断中");
 
   const analysis = await analyzer.analyze(segment, segments.slice(0, -1));
   analyses.push(analysis);
@@ -564,7 +603,7 @@ function updateTimelineItem(segmentId: string, analysis: SegmentAnalysis): void 
     head.textContent = labelFromAnalysis(analysis);
   }
   if (detail) {
-    detail.textContent = `${analysis.reason} · 主线：${analysis.topicState.mainThread}`;
+    detail.textContent = `${config.apiKey ? "" : "演示结果 · "}${analysis.reason} · 主线：${analysis.topicState.mainThread}`;
   }
 }
 
@@ -574,7 +613,8 @@ function updateTopicPanel(analysis: SegmentAnalysis): void {
   ui.topicText.textContent = path || analysis.topicState.rootTopic || analysis.topicState.currentTopic || "主线仍在形成";
   const confidence = Math.round(analysis.topicState.confidence * 100);
   const root = analysis.topicState.rootTopic ? `根主题：${analysis.topicState.rootTopic} · ` : "";
-  ui.topicMeta.textContent = `${root}当前：${analysis.topicState.currentTopic} · ${transitionLabel(analysis.transition)} · 置信度 ${confidence}%`;
+  const source = config.apiKey ? "AI 判断" : "本地演示判断，不代表真实语义分析";
+  ui.topicMeta.textContent = `${source} · ${root}当前：${analysis.topicState.currentTopic} · ${transitionLabel(analysis.transition)} · 置信度 ${confidence}%`;
 }
 
 function expressionModeLabel(mode: SegmentAnalysis["expressionMode"]): string {
@@ -630,14 +670,19 @@ function setStatus(message: string): void {
 }
 
 function syncModelBadge(): void {
-  ui.modelBadge.textContent = config.apiKey ? config.model : "本地演示";
+  const isByok = Boolean(config.apiKey);
+  ui.modelBadge.textContent = isByok ? config.model : "本地演示";
+  ui.statusText.textContent = isByok ? "AI 模式已启用" : "本地演示模式，未连接 AI";
+  ui.settingsButton.textContent = isByok ? "设置" : "配置 AI Key";
+  ui.settingsButton.classList.toggle("key-cta", !isByok);
+  ui.demoCallout.hidden = isByok;
   ui.modeNotice.classList.toggle("is-live", Boolean(config.apiKey));
   ui.modeNotice.innerHTML = config.apiKey
-    ? "<strong>语义分析模式</strong><span>已连接主题判断模型</span>"
-    : "<strong>演示模式</strong><span>未配置 API Key</span>";
+    ? "<strong>AI 语义分析模式</strong><span>已连接主题判断模型</span>"
+    : "<strong>本地演示模式</strong><span>未连接 AI，结果只是近似演示</span>";
   ui.modeHint.textContent = config.apiKey
-    ? "当前已配置 API Key。浏览器语音识别可用时会实时显示文字；如果切到录音模式，还需要中转站支持音频转写。"
-    : "当前没有 API Key。你仍然可以试动画，但分叉判断只是本地兜底，不代表真实语义分析。";
+    ? `AI 模式已启用。Key 只保存在当前浏览器，请求只会发送到 ${config.baseUrl}。`
+    : "本地演示模式不会发送模型请求。你可以先试动画；配置 Key 后会启用真实语义分析。";
 }
 
 function syncSettingsForm(): void {
@@ -647,6 +692,14 @@ function syncSettingsForm(): void {
   ui.transcriptionModelInput.value = config.transcriptionModel;
   ui.realtimeModelInput.value = config.realtimeModel;
   resetModelSelects();
+  setConnectionStatus(
+    config.apiKey ? "success" : "neutral",
+    config.apiKey
+      ? config.lastVerifiedAt
+        ? `AI 模式已启用，上次检测 ${formatVerifiedTime(config.lastVerifiedAt)}`
+        : "已保存 Key，建议检测连接"
+      : "未配置 Key，本地演示"
+  );
 }
 
 async function detectModels(options: { closeAfter: boolean; source: "manual" | "save" }): Promise<void> {
@@ -674,6 +727,7 @@ async function detectModels(options: { closeAfter: boolean; source: "manual" | "
         "whisper-1"
       ]);
     }
+    markCurrentConfigVerified(apiKey, baseUrl);
     setConnectionStatus("success", `连接可用，检测到 ${models.length} 个模型`);
     if (options.source === "save") {
       setStatus("Key 检测通过，可以开始实时判断");
@@ -685,6 +739,7 @@ async function detectModels(options: { closeAfter: boolean; source: "manual" | "
     console.warn(modelsError);
     try {
       await testChatConnection(baseUrl, apiKey, model);
+      markCurrentConfigVerified(apiKey, baseUrl);
       setConnectionStatus("success", `聊天接口可用：${model}；音频转写需另行支持`);
       if (options.source === "save") {
         setStatus("Key 可用；如果没有实时文字，请检查音频转写接口");
@@ -705,6 +760,19 @@ async function detectModels(options: { closeAfter: boolean; source: "manual" | "
 function setConnectionStatus(kind: "neutral" | "pending" | "success" | "error", message: string): void {
   ui.modelStatus.textContent = message;
   ui.modelStatus.dataset.state = kind;
+}
+
+function markCurrentConfigVerified(apiKey: string, baseUrl: string): void {
+  if (config.apiKey !== apiKey || normalizeBaseUrl(config.baseUrl, defaultConfig.baseUrl) !== baseUrl) {
+    return;
+  }
+  config = {
+    ...config,
+    providerMode: "byok",
+    lastVerifiedAt: new Date().toISOString()
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  syncModelBadge();
 }
 
 function renderModelOptions(models: string[]): void {
@@ -767,13 +835,30 @@ function loadConfig(): AnalyzerConfig {
   }
   try {
     const parsed = { ...defaultConfig, ...JSON.parse(raw) } as AnalyzerConfig;
+    const apiKey = parsed.apiKey?.trim() ?? "";
     return {
       ...parsed,
-      baseUrl: normalizeBaseUrl(parsed.baseUrl, defaultConfig.baseUrl)
+      providerMode: apiKey ? "byok" : "local-demo",
+      apiKey,
+      baseUrl: normalizeBaseUrl(parsed.baseUrl, defaultConfig.baseUrl),
+      lastVerifiedAt: parsed.lastVerifiedAt || ""
     };
   } catch {
     return defaultConfig;
   }
+}
+
+function formatVerifiedTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "刚才";
+  }
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function formatTime(milliseconds: number): string {

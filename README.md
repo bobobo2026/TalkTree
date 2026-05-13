@@ -8,9 +8,13 @@ TalkTree is designed for creators, vloggers, speakers, ADHD-style divergent thin
 
 ## Try It
 
-After GitHub Pages is enabled, the public demo will be available at:
+The public demo is available at:
 
 https://bobobo2026.github.io/TalkTree/
+
+You can try TalkTree without an API key. In that case it runs in **Local Demo Mode**: the tree still grows from your text, but the topic judgment is a lightweight local approximation rather than real AI semantic analysis.
+
+For better results, open Settings and configure your own OpenAI-compatible API key.
 
 ## What It Does
 
@@ -18,8 +22,9 @@ https://bobobo2026.github.io/TalkTree/
 - Detects whether expression is anchored around a root topic or exploratory across multiple topics
 - Shows topic path, current topic, transitions, and recent segments
 - Works well with external speech-to-text tools such as system dictation or Chinese input method voice typing
-- Uses an OpenAI-compatible chat completion API for semantic analysis
-- Keeps API keys in browser local storage
+- Can run without a key in local demo mode
+- Uses an OpenAI-compatible chat completion API for real semantic analysis when you bring your own key
+- Keeps API keys in browser local storage only
 
 ## 它能做什么
 
@@ -28,7 +33,8 @@ https://bobobo2026.github.io/TalkTree/
 - 展示根主题、当前主题、主题轨迹和最近片段
 - 可以配合系统听写、豆包输入法、微信输入法等外部语音转文字工具使用
 - 支持 OpenAI-compatible 中转站，只需要配置 Base URL 和 API Key
-- API Key 只保存在浏览器本地
+- 没有 Key 也可以用本地演示模式先试效果
+- API Key 只保存在浏览器本地，不会提交到仓库
 
 ## Why Text Stream First?
 
@@ -69,9 +75,22 @@ Open Settings in the app and configure:
 
 TalkTree currently uses the chat completions API for semantic analysis. Voice input is hidden in the current public UI because many relay providers do not support audio transcription or Realtime APIs reliably. Use text monitoring with your preferred speech-to-text input method for the best experience.
 
+## API Key Safety
+
+TalkTree does **not** include a shared public API key in the frontend. A key embedded in a public static site can be extracted and abused by anyone.
+
+The GitHub Pages version is a static app:
+
+- Your key is stored only in your browser's `localStorage`
+- Your key is sent only to the Base URL you configure
+- TalkTree has no backend server in static mode
+- You can clear the local key from Settings at any time
+
+If a future version offers a no-key real AI demo, it should use a small server-side proxy with rate limits and secret storage, not a key embedded in the client.
+
 ## SEO Keywords
 
-TalkTree, thought tree, real-time thought visualization, topic drift, branching thoughts, speech analysis, AI writing companion, ADHD thinking tool, divergent thinking, canvas animation, OpenAI-compatible app.
+TalkTree, thought tree, real-time thought visualization, topic drift, branching thoughts, speech analysis, AI writing companion, ADHD thinking tool, divergent thinking, canvas animation, OpenAI-compatible app, BYOK AI app, speech-to-text visualization, topic trajectory.
 
 ## License
 

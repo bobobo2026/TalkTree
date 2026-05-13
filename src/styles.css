@@ -223,6 +223,16 @@ h2 {
     background 160ms ease;
 }
 
+.settings-button.key-cta {
+  border-color: #293b24;
+  background: #293b24;
+  color: #fff;
+}
+
+.settings-button.key-cta:hover {
+  background: #344c2e;
+}
+
 .primary-button {
   background: #293b24;
   color: #fff;
@@ -254,6 +264,31 @@ h2 {
   background: rgba(250, 251, 246, 0.52);
   padding: 12px;
   overflow: hidden;
+}
+
+.demo-callout {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(94, 122, 75, 0.28);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #31592e;
+  background: rgba(232, 244, 226, 0.78);
+}
+
+.demo-callout[hidden] {
+  display: none;
+}
+
+.demo-callout strong {
+  font-size: 14px;
+}
+
+.demo-callout span {
+  color: #53694b;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .compact-panel {
@@ -460,6 +495,37 @@ h2 {
   line-height: 1.45;
 }
 
+.security-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(58, 102, 61, 0.22);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(232, 244, 226, 0.7);
+}
+
+.security-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #31592e;
+  font-size: 14px;
+}
+
+.security-card p {
+  margin: 0;
+  color: #5c6d54;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.security-card .ghost-button {
+  min-height: 36px;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+
 .advanced-settings {
   border: 1px solid rgba(69, 83, 58, 0.16);
   border-radius: 8px;
@@ -540,6 +606,10 @@ menu {
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .security-card {
+    grid-template-columns: 1fr;
   }
 
   .workspace {
