@@ -63,6 +63,7 @@ const textTranslations: Record<string, string> = {
   "导出 events.json": "Export events.json",
   "WebM 是小树透明层，可放进剪辑软件叠到原视频上。":
     "The WebM is a transparent tree layer that can be placed above the original video in editing software.",
+  "已识别 {count} 个片段。": "{count} segments detected.",
   视频分析结果: "Video Analysis",
   等待生成: "Waiting",
   还没有小树时间轴: "No tree timeline yet",
@@ -877,7 +878,7 @@ async function prepareVideoOverlay(): Promise<void> {
   }
 
   ui.prepareOverlayButton.disabled = true;
-  ui.overlayStatus.textContent = `正在生成 ${parsedSegments.length} 个小树事件...`;
+  ui.overlayStatus.textContent = `已识别 ${parsedSegments.length} 个片段。正在生成小树事件...`;
   overlayAnalyzer.reset();
   overlayCues = [];
   const history: SpeechSegment[] = [];
@@ -911,7 +912,7 @@ async function prepareVideoOverlay(): Promise<void> {
 }
 
 function parseTranscriptToSegments(text: string, duration: number): SpeechSegment[] {
-  const srtSegments = parseSrtSegments(text);
+  const srtSegments = normalizeTimedSegments(parseSrtSegments(text), duration);
   if (srtSegments.length) {
     return srtSegments;
   }
@@ -932,7 +933,10 @@ function parseTranscriptToSegments(text: string, duration: number): SpeechSegmen
 }
 
 function parseSrtSegments(text: string): SpeechSegment[] {
-  const blocks = text.replace(/\r/g, "").split(/\n{2,}/);
+  const normalized = stripSubtitleMetadata(text)
+    .replace(/\r/g, "")
+    .replace(/^\uFEFF/, "");
+  const blocks = normalized.includes("\n\n") ? normalized.split(/\n{2,}/) : splitLooseTimedBlocks(normalized);
   const segments: SpeechSegment[] = [];
   blocks.forEach((block) => {
     const lines = block
@@ -960,16 +964,87 @@ function parseSrtSegments(text: string): SpeechSegment[] {
   return segments;
 }
 
+function stripSubtitleMetadata(text: string): string {
+  const lines = text.replace(/\r/g, "").replace(/^\uFEFF/, "").split("\n");
+  const kept: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (/^WEBVTT\b/i.test(trimmed) || /^STYLE\b/i.test(trimmed) || /^REGION\b/i.test(trimmed)) {
+      continue;
+    }
+    if (/^NOTE\b/i.test(trimmed)) {
+      while (index + 1 < lines.length && lines[index + 1].trim()) {
+        index += 1;
+      }
+      continue;
+    }
+    kept.push(lines[index]);
+  }
+  return kept.join("\n");
+}
+
+function splitLooseTimedBlocks(text: string): string[] {
+  const lines = text.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+  lines.forEach((line) => {
+    if (line.includes("-->") && current.some((item) => item.includes("-->"))) {
+      blocks.push(current.join("\n"));
+      current = [];
+    }
+    if (line.trim()) {
+      current.push(line);
+    }
+  });
+  if (current.length) {
+    blocks.push(current.join("\n"));
+  }
+  return blocks;
+}
+
 function parseSrtTime(value: string): number {
-  const match = value.match(/(?:(\d+):)?(\d{2}):(\d{2})[,.](\d{1,3})/);
+  const cleanValue = value.trim().split(/\s+/)[0];
+  const match = cleanValue.match(/(?:(\d+):)?(\d{1,2}):(\d{2})(?:[,.](\d{1,3}))?/);
   if (!match) {
     return Number.NaN;
   }
   const hours = Number(match[1] ?? 0);
   const minutes = Number(match[2]);
   const seconds = Number(match[3]);
-  const milliseconds = Number(match[4].padEnd(3, "0"));
+  const milliseconds = Number((match[4] ?? "0").padEnd(3, "0"));
   return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
+}
+
+function normalizeTimedSegments(segments: SpeechSegment[], duration: number): SpeechSegment[] {
+  const safeDurationMs = Number.isFinite(duration) && duration > 0 ? duration * 1000 : 0;
+  const sorted = segments
+    .filter((segment) => segment.text.trim() && Number.isFinite(segment.startTime) && Number.isFinite(segment.endTime))
+    .map((segment) => {
+      const startTime = Math.max(0, safeDurationMs ? Math.min(segment.startTime, safeDurationMs) : segment.startTime);
+      const clampedEndTime = safeDurationMs ? Math.min(segment.endTime, safeDurationMs) : segment.endTime;
+      const endTime = safeDurationMs
+        ? Math.min(safeDurationMs, Math.max(startTime + 500, clampedEndTime))
+        : Math.max(startTime + 500, clampedEndTime);
+      return {
+        ...segment,
+        startTime,
+        endTime
+      };
+    })
+    .sort((a, b) => a.startTime - b.startTime);
+
+  return sorted
+    .map((segment, index) => {
+      const nextStart = sorted[index + 1]?.startTime;
+      const endTime = typeof nextStart === "number" && segment.endTime > nextStart
+        ? Math.max(segment.startTime + 500, nextStart - 50)
+        : segment.endTime;
+      return { ...segment, endTime };
+    })
+    .filter((segment, index, list) => {
+      const previous = list[index - 1];
+      return !previous || previous.startTime !== segment.startTime || previous.text !== segment.text;
+    });
 }
 
 function renderOverlayTimeline(): void {
@@ -982,15 +1057,23 @@ function renderOverlayTimeline(): void {
       const item = document.createElement("li");
       item.innerHTML = `
         <div class="timeline-head">
-          <span>${labelFromAnalysis(cue.analysis)}</span>
+          <span></span>
           <time>${formatVideoTime(cue.start)}</time>
         </div>
         <p class="timeline-text"></p>
-        <p class="timeline-detail">${cue.analysis.reason} · ${cue.analysis.branchLabel}</p>
+        <p class="timeline-detail"></p>
       `;
+      const label = item.querySelector<HTMLSpanElement>(".timeline-head span");
       const text = item.querySelector<HTMLParagraphElement>(".timeline-text");
+      const detail = item.querySelector<HTMLParagraphElement>(".timeline-detail");
+      if (label) {
+        label.textContent = labelFromAnalysis(cue.analysis);
+      }
       if (text) {
         text.textContent = cue.segment.text;
+      }
+      if (detail) {
+        detail.textContent = `${cue.analysis.reason} · ${cue.analysis.branchLabel}`;
       }
       ui.overlayTimeline.append(item);
     });
@@ -1128,13 +1211,19 @@ function exportOverlayEvents(): void {
     ui.overlayStatus.textContent = "请先生成小树时间轴。";
     return;
   }
-  const payload = overlayCues.map((cue) => ({
-    start: cue.start,
-    end: cue.end,
-    text: cue.segment.text,
-    event: cue.event,
-    analysis: cue.analysis
-  }));
+  const payload = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    source: config.apiKey ? "ai" : "local-demo",
+    duration: getVideoDuration(),
+    cues: overlayCues.map((cue) => ({
+      start: cue.start,
+      end: cue.end,
+      text: cue.segment.text,
+      event: cue.event,
+      analysis: cue.analysis
+    }))
+  };
   downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), "talktree-events.json");
   ui.overlayStatus.textContent = "events.json 已导出。";
 }
