@@ -74,6 +74,14 @@ const textTranslations: Record<string, string> = {
   "你的 Key 是本地安全配置": "Your Key Is Stored Locally",
   "TalkTree 的静态版没有自己的服务器。Key 只保存在当前浏览器，只会发送到你填写的 Base URL。":
     "The static TalkTree app has no backend server. Your key stays in this browser and is only sent to your configured Base URL.",
+  "Provider 安全检查": "Provider Safety Checklist",
+  "只使用你信任的 Base URL；TalkTree 会把 Key 作为 Authorization Bearer header 发送到该地址。":
+    "Use only a Base URL you trust; TalkTree sends your key to that URL as an Authorization Bearer header.",
+  "公开 GitHub Pages 版本不会代理或保存请求；localhost 开发模式可能使用本地 /api/provider 代理。":
+    "The public GitHub Pages build does not proxy or store requests; localhost development can use a local /api/provider proxy.",
+  "不要在 issue、PR、截图或录屏中公开 API Key、私有文字稿或视频素材。":
+    "Do not expose API keys, private transcripts, or video files in issues, pull requests, screenshots, or recordings.",
+  "查看完整安全说明": "Read Full Security Notes",
   "清除本地 Key": "Clear Local Key",
   检测连接: "Test Connection",
   未检测: "Not tested",
@@ -298,6 +306,15 @@ appRoot.innerHTML = `
           <p>TalkTree 的静态版没有自己的服务器。Key 只保存在当前浏览器，只会发送到你填写的 Base URL。</p>
         </div>
         <button id="clearKeyButton" type="button" class="ghost-button">清除本地 Key</button>
+      </section>
+      <section class="provider-safety-card" aria-label="Provider 安全检查">
+        <strong>Provider 安全检查</strong>
+        <ul>
+          <li>只使用你信任的 Base URL；TalkTree 会把 Key 作为 Authorization Bearer header 发送到该地址。</li>
+          <li>公开 GitHub Pages 版本不会代理或保存请求；localhost 开发模式可能使用本地 /api/provider 代理。</li>
+          <li>不要在 issue、PR、截图或录屏中公开 API Key、私有文字稿或视频素材。</li>
+        </ul>
+        <a href="https://github.com/bobobo2026/TalkTree/blob/main/docs/provider-security.md" target="_blank" rel="noreferrer">查看完整安全说明</a>
       </section>
       <div class="connection-check">
         <button id="detectModelsButton" type="button" class="secondary-button">检测连接</button>

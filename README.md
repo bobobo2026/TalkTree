@@ -77,6 +77,7 @@ See:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [SECURITY.md](SECURITY.md)
+- [Provider configuration and API-key safety](docs/provider-security.md)
 - [ROADMAP.md](ROADMAP.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
@@ -143,6 +144,8 @@ The GitHub Pages version is a static app:
 - Your key is sent only to the Base URL you configure
 - TalkTree has no backend server in static mode
 - You can clear the local key from Settings at any time
+
+For implementation details and contributor rules, see [Provider configuration and API-key safety](docs/provider-security.md).
 
 If a future version offers a no-key real AI demo, it should use a small server-side proxy with rate limits and secret storage, not a key embedded in the client.
 

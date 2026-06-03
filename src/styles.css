@@ -693,6 +693,39 @@ h2 {
   white-space: nowrap;
 }
 
+.provider-safety-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(69, 83, 58, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.provider-safety-card strong {
+  color: #34442f;
+  font-size: 14px;
+}
+
+.provider-safety-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #5c6d54;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.provider-safety-card a {
+  width: fit-content;
+  color: #31592e;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .advanced-settings {
   border: 1px solid rgba(69, 83, 58, 0.16);
   border-radius: 8px;
