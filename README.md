@@ -1,10 +1,25 @@
 # TalkTree
 
+![CI](https://github.com/bobobo2026/TalkTree/actions/workflows/ci.yml/badge.svg)
+![GitHub Pages](https://github.com/bobobo2026/TalkTree/actions/workflows/pages.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+
 TalkTree is a real-time thought trajectory visualizer. It listens to a growing text stream and renders your expression as a small tree: the trunk grows when the thought continues, and branches appear when the topic shifts, explores a side path, or returns to a previous thread.
 
 TalkTree is designed for creators, vloggers, speakers, ADHD-style divergent thinkers, and anyone who wants to see how their ideas move while they talk or write.
 
 中文：TalkTree 是一个实时表达轨迹可视化工具。你可以把语音输入法、系统听写、豆包输入法或直接打字产生的文本放进文本监听框，TalkTree 会判断表达模式、主题轨迹和话题跳转，并用一棵不断生长和分叉的小树展示出来。
+
+## Project Status
+
+TalkTree is actively maintained as a small open-source project by [bobobo2026](https://github.com/bobobo2026). The current public demo is a static GitHub Pages app with no bundled shared API key.
+
+Maintainer focus:
+
+- Review issues and pull requests for topic-analysis quality, privacy, accessibility, and creator workflows
+- Keep the public demo buildable and deployable from `main`
+- Document security-sensitive behavior around API keys, transcripts, browser storage, and provider calls
+- Maintain a roadmap for local demo quality, OpenAI-compatible analysis, and video overlay export
 
 ## Try It
 
@@ -27,6 +42,16 @@ For better results, open Settings and configure your own OpenAI-compatible API k
 - Keeps API keys in browser local storage only
 - Generates a transparent tree overlay for existing vlog/video footage
 
+## Why This Exists
+
+Most speech tools produce a transcript, but they do not show how a thought moves. TalkTree focuses on the layer after transcription:
+
+```text
+text stream -> topic trajectory analysis -> tree events -> animated tree
+```
+
+This makes the project useful even when users prefer different speech-to-text tools, languages, or OpenAI-compatible providers.
+
 ## 它能做什么
 
 - 把实时文本流变成一棵会生长、分叉的小树
@@ -38,15 +63,22 @@ For better results, open Settings and configure your own OpenAI-compatible API k
 - API Key 只保存在浏览器本地，不会提交到仓库
 - 可以给已有视频生成透明小树叠加层，用于剪映、Final Cut、Premiere 等剪辑软件
 
-## Why Text Stream First?
+## Maintenance and Contribution
 
-Speech-to-text is already available on most phones and computers through input methods and system dictation. TalkTree treats speech recognition as an input source, not the core product. The core product is:
+Useful contribution areas:
 
-```text
-text stream -> topic trajectory analysis -> tree events -> animated tree
-```
+- Topic transition detection and local demo heuristics
+- Accessibility and keyboard navigation
+- API-key safety and provider configuration
+- SRT/transcript import and overlay export reliability
+- Bilingual documentation and examples
 
-This makes TalkTree easier to use with many existing speech tools and avoids depending on a specific transcription provider.
+See:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
+- [ROADMAP.md](ROADMAP.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
 ## Local Development
 
@@ -66,6 +98,18 @@ Build:
 ```bash
 npm run build
 ```
+
+## Repository Health
+
+The repository includes:
+
+- MIT license
+- GitHub Pages deployment workflow
+- CI build workflow for pushes and pull requests
+- Issue templates for bugs and feature requests
+- Pull request template with security/privacy checklist
+- Security policy for private vulnerability reporting
+- Public roadmap and contribution guide
 
 ## Model Configuration
 
@@ -101,6 +145,13 @@ The GitHub Pages version is a static app:
 - You can clear the local key from Settings at any time
 
 If a future version offers a no-key real AI demo, it should use a small server-side proxy with rate limits and secret storage, not a key embedded in the client.
+
+## Known Limitations
+
+- Local demo mode uses lightweight heuristics, not real semantic understanding.
+- Provider quality varies across OpenAI-compatible APIs.
+- Voice input is intentionally not the core dependency; TalkTree expects text streams from system dictation, input methods, pasted transcripts, or provider-backed workflows.
+- Transparent video overlay export depends on browser media support.
 
 ## SEO Keywords
 

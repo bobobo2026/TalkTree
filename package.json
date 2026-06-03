@@ -1,6 +1,6 @@
 {
   "name": "talktree",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A real-time thought trajectory visualizer that turns speech or text streams into a growing branching tree.",
   "private": false,
   "type": "module",
