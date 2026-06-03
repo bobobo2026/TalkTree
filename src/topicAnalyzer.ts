@@ -29,6 +29,34 @@ const SYSTEM_PROMPT = `你是一个实时表达轨迹分析器。你只观察说
 
 必须只返回 JSON，不要 Markdown。`;
 
+const ENGLISH_STOPWORDS = new Set([
+  "and",
+  "are",
+  "but",
+  "can",
+  "for",
+  "from",
+  "have",
+  "how",
+  "into",
+  "let",
+  "like",
+  "more",
+  "not",
+  "our",
+  "that",
+  "the",
+  "then",
+  "this",
+  "today",
+  "want",
+  "what",
+  "when",
+  "with"
+]);
+
+const CJK_FILLERS = /[，。！？；：、,.!?;:()[\]{}"'“”‘’\s]/g;
+
 interface RawModelResponse {
   mode?: string;
   expressionMode?: string;
@@ -204,22 +232,91 @@ export class TopicAnalyzer {
 
   private localFallback(segment: SpeechSegment, history: SpeechSegment[]): SegmentAnalysis {
     const elapsedSeconds = this.firstSegmentTime === null ? 0 : (segment.endTime - this.firstSegmentTime) / 1000;
-    const previous = history.at(-1)?.text ?? "";
-    const overlap = this.characterOverlap(segment.text, previous);
-    const establishing = elapsedSeconds < 25 || history.length < 2;
-    const mode = establishing ? "establishing" : overlap < 0.08 ? "branch" : overlap < 0.18 ? "uncertain" : "trunk";
-    const expressionMode: SegmentAnalysis["expressionMode"] = establishing ? "forming" : "exploratory";
-    const transition: SegmentAnalysis["transition"] = mode === "branch" ? "shift" : mode === "uncertain" ? "uncertain" : "continue";
-    const currentTopic = segment.text.slice(0, 12) || "当前片段";
-    const driftLevel = mode === "branch" ? 0.75 : mode === "uncertain" ? 0.42 : 0.16;
+    const anchorTopic = this.detectAnchorTopic(segment.text);
+    const currentTopic = this.extractTopicLabel(segment.text);
+    const previousSegments = history.slice(-3);
+    const previousTokens = this.tokensForTexts(previousSegments.map((item) => item.text));
+    const currentTokens = this.tokenize(segment.text);
+    const previousOverlap = this.tokenOverlap(currentTokens, previousTokens);
+    const existingRootTopic = this.topicState.rootTopic || anchorTopic;
+    const rootOverlap = existingRootTopic ? this.tokenOverlap(currentTokens, this.tokenize(existingRootTopic)) : 0;
+    const previousTopicMatch = this.findPreviousTopicMatch(currentTokens);
+    const establishing = elapsedSeconds < 18 || history.length < 2;
+
+    let expressionMode: SegmentAnalysis["expressionMode"] = this.topicState.expressionMode;
+    let mode: SegmentAnalysis["mode"] = "establishing";
+    let transition: SegmentAnalysis["transition"] = "uncertain";
+    let driftLevel = 0.28;
+    let reason = "本地演示判断，配置模型后更准确";
+
+    if (anchorTopic || this.topicState.expressionMode === "anchored") {
+      expressionMode = "anchored";
+      if (anchorTopic) {
+        mode = "establishing";
+        transition = "continue";
+        driftLevel = 0.12;
+        reason = "识别到明确根主题";
+      } else if (rootOverlap >= 0.22) {
+        mode = previousTopicMatch ? "return" : "trunk";
+        transition = previousTopicMatch ? "return" : "continue";
+        driftLevel = 0.18;
+        reason = previousTopicMatch ? "回到已出现主题" : "贴近根主题";
+      } else if (previousOverlap >= 0.2) {
+        mode = "trunk";
+        transition = "continue";
+        driftLevel = 0.24;
+        reason = "延续上一片段";
+      } else if (establishing) {
+        mode = "establishing";
+        transition = "uncertain";
+        driftLevel = 0.34;
+        reason = "仍在建立主线";
+      } else {
+        mode = "branch";
+        transition = "branch";
+        driftLevel = 0.72;
+        reason = "偏离根主题形成分支";
+      }
+    } else {
+      expressionMode = establishing ? "forming" : "exploratory";
+      if (establishing) {
+        mode = "establishing";
+        transition = "uncertain";
+        driftLevel = 0.3;
+        reason = "仍在建立主线";
+      } else if (previousTopicMatch) {
+        mode = "return";
+        transition = "return";
+        driftLevel = 0.2;
+        reason = "回到已出现主题";
+      } else if (previousOverlap >= 0.18) {
+        mode = "trunk";
+        transition = "continue";
+        driftLevel = 0.18;
+        reason = "延续上一片段";
+      } else if (previousOverlap >= 0.1) {
+        mode = "uncertain";
+        transition = "uncertain";
+        driftLevel = 0.42;
+        reason = "有轻微话题漂移";
+      } else {
+        mode = "branch";
+        transition = "shift";
+        driftLevel = 0.76;
+        reason = "出现明显话题跳转";
+      }
+    }
+
+    const rootTopic = anchorTopic || this.topicState.rootTopic;
+    const nextPath = this.nextLocalTopicPath(currentTopic, transition, rootTopic);
     const topicState = {
-      mainThread: history.slice(0, 3).map((item) => item.text).join(" ").slice(0, 42) || "正在形成主线",
+      mainThread: rootTopic || nextPath[0] || currentTopic || "正在形成主线",
       expressionMode,
-      rootTopic: "",
+      rootTopic,
       currentTopic,
-      topicPath: [...this.topicState.topicPath, currentTopic].filter(Boolean).slice(-5),
-      recentSubtopics: [segment.text.slice(0, 10)].filter(Boolean),
-      confidence: establishing ? 0.25 : 0.35
+      topicPath: nextPath,
+      recentSubtopics: nextPath.filter((topic) => topic !== rootTopic).slice(-5),
+      confidence: this.localConfidence(mode, transition, previousOverlap, rootOverlap, Boolean(anchorTopic))
     };
     this.topicState = topicState;
 
@@ -227,29 +324,142 @@ export class TopicAnalyzer {
       mode,
       expressionMode,
       transition,
-      branchLabel: mode === "branch" ? segment.text.slice(0, 6) || "新分支" : "主线",
+      branchLabel: mode === "branch" || transition === "shift" ? currentTopic || "新分支" : previousTopicMatch || rootTopic || "主线",
       driftLevel,
-      reason: "本地演示判断，配置模型后更准确",
+      reason,
       topicState
     };
   }
 
-  private characterOverlap(a: string, b: string): number {
-    if (!a || !b) {
-      return 0;
+  private detectAnchorTopic(text: string): string {
+    const patterns = [
+      /(?:今天|这次|本次|接下来|我想|我们来|主要)(?:聊|讲|讨论|分享|说说|分析)(?:一下)?(.{2,28})/,
+      /(?:主题|主线|核心|重点)(?:是|就是|围绕)(.{2,28})/,
+      /(?:today|this time|i want to|we will|let'?s)\s+(?:talk about|discuss|share|analyze)\s+(.{2,48})/i,
+      /(?:topic|main thread|focus)\s+(?:is|will be|around)\s+(.{2,48})/i
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) {
+        return this.extractTopicLabel(match[1]);
+      }
     }
-    const charsA = new Set([...a].filter((char) => /[\u4e00-\u9fa5a-zA-Z0-9]/.test(char)));
-    const charsB = new Set([...b].filter((char) => /[\u4e00-\u9fa5a-zA-Z0-9]/.test(char)));
-    if (!charsA.size || !charsB.size) {
+    return "";
+  }
+
+  private extractTopicLabel(text: string): string {
+    const compactCjk = text.replace(CJK_FILLERS, "");
+    const cjkChars = compactCjk.match(/[\u4e00-\u9fff]/g)?.length ?? 0;
+    const latinChars = text.match(/[a-zA-Z]/g)?.length ?? 0;
+    if (cjkChars >= latinChars && compactCjk) {
+      return compactCjk.slice(0, 12);
+    }
+
+    const english = text
+      .toLowerCase()
+      .match(/[a-z][a-z0-9-]{2,}/g)
+      ?.filter((word) => !ENGLISH_STOPWORDS.has(word))
+      .slice(0, 3)
+      .join(" ");
+    if (english) {
+      return english.slice(0, 28);
+    }
+
+    if (compactCjk) {
+      return compactCjk.slice(0, 12);
+    }
+
+    return text.trim().slice(0, 12) || "当前片段";
+  }
+
+  private tokenize(text: string): Set<string> {
+    const tokens = new Set<string>();
+    text
+      .toLowerCase()
+      .match(/[a-z][a-z0-9-]{2,}/g)
+      ?.forEach((word) => {
+        if (!ENGLISH_STOPWORDS.has(word)) {
+          tokens.add(word);
+        }
+      });
+
+    text.match(/[\u4e00-\u9fff]{2,}/g)?.forEach((chunk) => {
+      const compact = chunk.replace(CJK_FILLERS, "");
+      if (compact.length <= 4) {
+        tokens.add(compact);
+        return;
+      }
+      for (let index = 0; index < compact.length - 1; index += 1) {
+        tokens.add(compact.slice(index, index + 2));
+      }
+    });
+
+    return tokens;
+  }
+
+  private tokensForTexts(texts: string[]): Set<string> {
+    const tokens = new Set<string>();
+    texts.forEach((text) => {
+      this.tokenize(text).forEach((token) => tokens.add(token));
+    });
+    return tokens;
+  }
+
+  private tokenOverlap(a: Set<string>, b: Set<string>): number {
+    if (!a.size || !b.size) {
       return 0;
     }
     let shared = 0;
-    charsA.forEach((char) => {
-      if (charsB.has(char)) {
+    a.forEach((token) => {
+      if (b.has(token)) {
         shared += 1;
       }
     });
-    return shared / Math.max(charsA.size, charsB.size);
+    return shared / Math.max(a.size, b.size);
+  }
+
+  private findPreviousTopicMatch(currentTokens: Set<string>): string {
+    const candidates = this.topicState.topicPath.slice(0, -1).reverse();
+    return candidates.find((topic) => this.tokenOverlap(currentTokens, this.tokenize(topic)) >= 0.2) ?? "";
+  }
+
+  private nextLocalTopicPath(currentTopic: string, transition: SegmentAnalysis["transition"], rootTopic: string): string[] {
+    const path = this.topicState.topicPath.length ? [...this.topicState.topicPath] : rootTopic ? [rootTopic] : [];
+    if (!currentTopic) {
+      return path.slice(-5);
+    }
+    if (transition === "return") {
+      const existingIndex = path.findIndex((topic) => topic === currentTopic);
+      if (existingIndex >= 0) {
+        return [...path.slice(0, existingIndex + 1), currentTopic].slice(-5);
+      }
+    }
+    if (path.at(-1) !== currentTopic) {
+      path.push(currentTopic);
+    }
+    return path.filter(Boolean).slice(-5);
+  }
+
+  private localConfidence(
+    mode: SegmentAnalysis["mode"],
+    transition: SegmentAnalysis["transition"],
+    previousOverlap: number,
+    rootOverlap: number,
+    hasAnchor: boolean
+  ): number {
+    if (hasAnchor) {
+      return 0.58;
+    }
+    if (mode === "establishing") {
+      return 0.28;
+    }
+    if (transition === "continue" || transition === "return") {
+      return this.clamp(0.36 + Math.max(previousOverlap, rootOverlap), 0.35, 0.72);
+    }
+    if (transition === "branch" || transition === "shift") {
+      return this.clamp(0.64 - previousOverlap, 0.42, 0.68);
+    }
+    return 0.34;
   }
 
   private clamp(value: number, min: number, max: number): number {

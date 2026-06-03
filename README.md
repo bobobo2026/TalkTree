@@ -78,6 +78,7 @@ See:
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [SECURITY.md](SECURITY.md)
 - [Provider configuration and API-key safety](docs/provider-security.md)
+- [Local demo topic heuristics](docs/local-demo-heuristics.md)
 - [ROADMAP.md](ROADMAP.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
@@ -152,6 +153,7 @@ If a future version offers a no-key real AI demo, it should use a small server-s
 ## Known Limitations
 
 - Local demo mode uses lightweight heuristics, not real semantic understanding.
+- Local demo heuristics are documented in [Local demo topic heuristics](docs/local-demo-heuristics.md).
 - Provider quality varies across OpenAI-compatible APIs.
 - Voice input is intentionally not the core dependency; TalkTree expects text streams from system dictation, input methods, pasted transcripts, or provider-backed workflows.
 - Transparent video overlay export depends on browser media support.
