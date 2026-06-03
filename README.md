@@ -79,6 +79,7 @@ See:
 - [SECURITY.md](SECURITY.md)
 - [Provider configuration and API-key safety](docs/provider-security.md)
 - [Local demo topic heuristics](docs/local-demo-heuristics.md)
+- [Video overlay workflow](docs/overlay-workflow.md)
 - [ROADMAP.md](ROADMAP.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
@@ -134,6 +135,8 @@ TalkTree includes a video overlay workspace for finished vlog footage:
 5. Export `talktree-overlay.webm` or `talktree-events.json`
 
 The exported WebM contains only the tree overlay on a transparent canvas. Put it above the original video in your editing software. If your configured provider supports `/audio/transcriptions`, TalkTree can also try to transcribe the imported video directly, but SRT/transcript input is the most reliable workflow today.
+
+For supported subtitle formats, timeline normalization, and exported JSON shape, see [Video overlay workflow](docs/overlay-workflow.md).
 
 ## API Key Safety
 
